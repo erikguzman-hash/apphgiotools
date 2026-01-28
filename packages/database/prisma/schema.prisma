@@ -1,0 +1,421 @@
+// =============================================
+// APPHGIO TOOLS - Schema de Base de Datos
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USUARIOS ====================
+model User {
+  id          String     @id @default(cuid())
+  email       String     @unique
+  password    String
+  displayName String     @map("display_name")
+  avatar      String?
+  role        UserRole   @default(free)
+  status      UserStatus @default(pending)
+
+  // Vinculaciones
+  companyId       String?  @map("company_id")
+  company         Company? @relation(fields: [companyId], references: [id])
+  assignedToolIds String[] @map("assigned_tool_ids")
+  enrolledCourses String[] @map("enrolled_courses")
+
+  // Restricciones
+  maxToolsAccess   Int?      @map("max_tools_access")
+  expirationDate   DateTime? @map("expiration_date")
+  dailyAccessLimit Int?      @map("daily_access_limit")
+  limitedFeatures  String[]  @map("limited_features")
+
+  // Metadata
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  lastLogin DateTime? @map("last_login")
+  createdBy String?   @map("created_by")
+
+  // Relaciones
+  accessLogs   AccessLog[]
+  errorLogs    ErrorLog[]
+  systemLogs   SystemLog[] @relation("ActorLogs")
+  refreshTokens RefreshToken[]
+  toolsCreated Tool[]      @relation("ToolCreator")
+  toolsUpdated Tool[]      @relation("ToolUpdater")
+
+  @@map("users")
+}
+
+enum UserRole {
+  admin
+  workspace
+  school
+  client
+  beta
+  free
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+  pending
+}
+
+// ==================== COMPANIAS ====================
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("companies")
+}
+
+// ==================== REFRESH TOKENS ====================
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+// ==================== HERRAMIENTAS ====================
+model Tool {
+  id              String     @id @default(cuid())
+  name            String
+  slug            String     @unique
+  description     String
+  longDescription String?    @map("long_description") @db.Text
+
+  // Clasificacion
+  categoryId String   @map("category_id")
+  category   Category @relation(fields: [categoryId], references: [id])
+  sectionId  String   @map("section_id")
+  section    Section  @relation(fields: [sectionId], references: [id])
+  type       ToolType
+  tags       String[]
+
+  // Acceso
+  accessUrl  String     @map("access_url")
+  accessType AccessType @map("access_type")
+
+  // Embed config (JSON)
+  embedWidth       String? @map("embed_width")
+  embedHeight      String? @map("embed_height")
+  embedFullscreen  Boolean @default(true) @map("embed_fullscreen")
+
+  // Media
+  icon          String
+  screenshots   String[]
+  videoUrl      String? @map("video_url")
+  documentation String? @db.Text
+
+  // Estado
+  status  ToolStatus @default(active)
+  version String     @default("1.0.0")
+
+  // Permisos
+  allowedRoles     UserRole[]
+  relatedCourses   String[]   @map("related_courses")
+  requiresApproval Boolean    @default(false) @map("requires_approval")
+
+  // Restricciones
+  maxUses        Int?     @map("max_uses")
+  maxUsesPerDay  Int?     @map("max_uses_per_day")
+  expirationDays Int?     @map("expiration_days")
+
+  // Stats
+  totalAccess  Int      @default(0) @map("total_access")
+  uniqueUsers  Int      @default(0) @map("unique_users")
+  lastAccessed DateTime? @map("last_accessed")
+  avgRating    Float?   @map("avg_rating")
+  totalRatings Int      @default(0) @map("total_ratings")
+
+  // Metadata
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation("ToolCreator", fields: [createdById], references: [id])
+  updatedById String   @map("updated_by_id")
+  updatedBy   User     @relation("ToolUpdater", fields: [updatedById], references: [id])
+
+  // Relaciones
+  accessLogs AccessLog[]
+
+  @@map("tools")
+}
+
+enum ToolType {
+  web_app     @map("web-app")
+  desktop_app @map("desktop-app")
+  mobile_app  @map("mobile-app")
+  api
+  script
+  template
+  resource
+  documentation
+}
+
+enum ToolStatus {
+  active
+  beta
+  maintenance
+  deprecated
+  coming_soon @map("coming-soon")
+}
+
+enum AccessType {
+  redirect
+  embed
+  download
+  api_key @map("api-key")
+}
+
+// ==================== CATEGORIAS ====================
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  icon        String
+  color       String   @default("#3b82f6")
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  toolCount   Int      @default(0) @map("tool_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tools Tool[]
+
+  @@map("categories")
+}
+
+// ==================== SECCIONES ====================
+model Section {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  icon        String
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  toolCount   Int      @default(0) @map("tool_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tools Tool[]
+
+  @@map("sections")
+}
+
+// ==================== ACCESS LOGS ====================
+model AccessLog {
+  id        String       @id @default(cuid())
+  userId    String       @map("user_id")
+  user      User         @relation(fields: [userId], references: [id])
+  userEmail String       @map("user_email")
+  userName  String       @map("user_name")
+  userRole  UserRole     @map("user_role")
+
+  toolId   String @map("tool_id")
+  tool     Tool   @relation(fields: [toolId], references: [id])
+  toolName String @map("tool_name")
+
+  action AccessAction
+
+  // Contexto
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent") @db.Text
+  referrer  String?
+  sessionId String? @map("session_id")
+
+  // Resultado
+  success      Boolean @default(true)
+  errorCode    String? @map("error_code")
+  errorMessage String? @map("error_message")
+  responseTime Int?    @map("response_time")
+
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([toolId])
+  @@index([timestamp])
+  @@map("access_logs")
+}
+
+enum AccessAction {
+  view
+  access
+  download
+  api_call   @map("api-call")
+  embed_load @map("embed-load")
+}
+
+// ==================== ERROR LOGS ====================
+model ErrorLog {
+  id       String        @id @default(cuid())
+  type     ErrorType
+  severity ErrorSeverity
+
+  // Contexto
+  userId    String? @map("user_id")
+  user      User?   @relation(fields: [userId], references: [id])
+  userEmail String? @map("user_email")
+  toolId    String? @map("tool_id")
+  toolName  String? @map("tool_name")
+  endpoint  String?
+  method    String?
+
+  // Detalles
+  code     String
+  message  String  @db.Text
+  stack    String? @db.Text
+  metadata Json?
+
+  // Estado
+  status     ErrorStatus @default(new)
+  assignedTo String?     @map("assigned_to")
+  resolvedAt DateTime?   @map("resolved_at")
+  resolvedBy String?     @map("resolved_by")
+  resolution String?     @db.Text
+  notes      String[]
+
+  timestamp DateTime  @default(now())
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([timestamp])
+  @@map("error_logs")
+}
+
+enum ErrorType {
+  auth_error
+  access_denied
+  tool_unavailable
+  api_error
+  validation_error
+  system_error
+  integration_error
+  database_error
+  unknown
+}
+
+enum ErrorSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ErrorStatus {
+  new
+  acknowledged
+  investigating
+  resolved
+  ignored
+}
+
+// ==================== SYSTEM LOGS ====================
+model SystemLog {
+  id       String            @id @default(cuid())
+  type     SystemLogType
+  category SystemLogCategory
+
+  action      String
+  description String @db.Text
+
+  // Actor
+  actorId    String?   @map("actor_id")
+  actor      User?     @relation("ActorLogs", fields: [actorId], references: [id])
+  actorEmail String?   @map("actor_email")
+  actorRole  UserRole? @map("actor_role")
+
+  // Target
+  targetType String? @map("target_type")
+  targetId   String? @map("target_id")
+  targetName String? @map("target_name")
+
+  // Cambios
+  previousValue Json? @map("previous_value")
+  newValue      Json? @map("new_value")
+
+  // Contexto
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent") @db.Text
+
+  timestamp DateTime @default(now())
+
+  @@index([type])
+  @@index([category])
+  @@index([actorId])
+  @@index([timestamp])
+  @@map("system_logs")
+}
+
+enum SystemLogType {
+  info
+  warning
+  error
+  audit
+  security
+}
+
+enum SystemLogCategory {
+  auth
+  users
+  tools
+  categories
+  sections
+  settings
+  system
+}
+
+// ==================== PLATFORM SETTINGS ====================
+model PlatformSetting {
+  id    String @id @default("main")
+  key   String @unique
+  value Json
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("platform_settings")
+}
+
+// ==================== ANALYTICS (Agregados diarios) ====================
+model ToolAnalytics {
+  id      String   @id @default(cuid())
+  toolId  String   @map("tool_id")
+  date    DateTime @db.Date
+
+  views         Int @default(0)
+  uniqueViews   Int @default(0) @map("unique_views")
+  accesses      Int @default(0)
+  uniqueAccesses Int @default(0) @map("unique_accesses")
+  downloads     Int @default(0)
+  errors        Int @default(0)
+
+  byRole Json? @map("by_role")
+
+  @@unique([toolId, date])
+  @@index([toolId])
+  @@index([date])
+  @@map("tool_analytics")
+}

@@ -1,0 +1,36 @@
+{
+  "name": "apphgio-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plataforma de gestion de herramientas tecnologicas - Apphgio",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@apphgio/web",
+    "dev:admin": "turbo run dev --filter=@apphgio/admin",
+    "dev:api": "turbo run dev --filter=@apphgio/api",
+    "build": "turbo run build",
+    "build:web": "turbo run build --filter=@apphgio/web",
+    "build:admin": "turbo run build --filter=@apphgio/admin",
+    "build:api": "turbo run build --filter=@apphgio/api",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rimraf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:generate": "turbo run db:generate --filter=@apphgio/database",
+    "db:push": "turbo run db:push --filter=@apphgio/database",
+    "db:studio": "turbo run db:studio --filter=@apphgio/database"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "prettier": "^3.2.0",
+    "rimraf": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "npm@10.9.3"
+}
