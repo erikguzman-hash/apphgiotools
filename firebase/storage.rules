@@ -1,0 +1,50 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Funcion para verificar autenticacion
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Funcion para verificar rol admin
+    function isAdmin() {
+      return isAuthenticated() &&
+             request.auth.token.role == 'admin';
+    }
+
+    // Archivos publicos (iconos de herramientas, logos)
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Iconos de herramientas
+    match /tools/{toolId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Screenshots de herramientas
+    match /screenshots/{toolId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Avatares de usuarios
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() &&
+                      (request.auth.uid == userId || isAdmin());
+    }
+
+    // Documentos privados
+    match /private/{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // Regla por defecto: denegar todo
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

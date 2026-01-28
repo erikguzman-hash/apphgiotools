@@ -22,9 +22,14 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "db:generate": "turbo run db:generate --filter=@apphgio/database",
     "db:push": "turbo run db:push --filter=@apphgio/database",
-    "db:studio": "turbo run db:studio --filter=@apphgio/database"
+    "db:studio": "turbo run db:studio --filter=@apphgio/database",
+    "firebase:deploy": "firebase deploy",
+    "firebase:deploy:web": "firebase deploy --only hosting:web",
+    "firebase:deploy:admin": "firebase deploy --only hosting:admin",
+    "firebase:deploy:storage": "firebase deploy --only storage"
   },
   "devDependencies": {
+    "firebase-tools": "^13.0.0",
     "turbo": "^2.0.0",
     "prettier": "^3.2.0",
     "rimraf": "^5.0.0"

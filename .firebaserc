@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "default": "apphgio"
+  },
+  "targets": {
+    "apphgio": {
+      "hosting": {
+        "web": ["apphgio"],
+        "admin": ["apphgio-admin"]
+      }
+    }
+  }
+}
