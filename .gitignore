@@ -17,18 +17,74 @@ out
 .env.test.local
 .env.production.local
 .env*.local
+.env.development
+.env.production
+.env.staging
 
+# ===========================================
+# SECURITY - Sensitive files
+# ===========================================
+
+# Firebase service account / credentials
+firebase-service-account.json
+*-service-account.json
+*serviceAccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+*-adminsdk-*.json
+
+# Google Cloud credentials
+gcloud-credentials.json
+google-credentials.json
+application_default_credentials.json
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Secret files
+*.secret
+*.secrets
+secrets.json
+secrets.yaml
+secrets.yml
+
+# API keys file
+api-keys.json
+apikeys.json
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
+
+# AWS
+.aws/
+aws-credentials
+.boto
+
+# ===========================================
 # IDE
+# ===========================================
 .idea
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 *.swp
 *.swo
+*.sublime-workspace
+*.sublime-project
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Logs
 logs
@@ -36,18 +92,38 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Testing
 coverage
 .nyc_output
+*.lcov
 
 # Turbo
 .turbo
 
-# Misc
-*.pem
+# Vercel
 .vercel
 
 # Database
 *.db
 *.sqlite
+*.sqlite3
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+.stylelintcache
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Lock files (optional - uncomment if you don't want to track)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
