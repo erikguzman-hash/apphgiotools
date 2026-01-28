@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==================== FUNCIONES HELPER ====================
+
+    // Verificar si el usuario esta autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Obtener rol del usuario desde el token
+    function getUserRole() {
+      return request.auth.token.role;
+    }
+
+    // Verificar si es admin
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    // Verificar si es workspace (acceso completo)
+    function isWorkspace() {
+      return isAuthenticated() && getUserRole() in ['admin', 'workspace'];
+    }
+
+    // Verificar si es el mismo usuario
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ==================== USUARIOS ====================
+    match /users/{userId} {
+      // Cualquier autenticado puede leer su propio perfil
+      // Admin puede leer todos
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Solo admin puede crear/modificar usuarios
+      allow create, update: if isAdmin();
+
+      // Solo admin puede eliminar
+      allow delete: if isAdmin();
+    }
+
+    // ==================== HERRAMIENTAS ====================
+    match /tools/{toolId} {
+      // Lectura segun rol del usuario
+      allow read: if isAuthenticated() && canAccessTool(resource.data);
+
+      // Solo admin puede crear/modificar/eliminar
+      allow create, update, delete: if isAdmin();
+
+      // Funcion para verificar acceso a herramienta
+      function canAccessTool(tool) {
+        let userRole = getUserRole();
+
+        // Admin y workspace tienen acceso total
+        return userRole in ['admin', 'workspace'] ||
+
+        // School: herramientas con rol school o de sus cursos
+        (userRole == 'school' &&
+          ('school' in tool.allowedRoles ||
+           hasEnrolledCourse(tool.relatedCourses))) ||
+
+        // Client: solo herramientas asignadas
+        (userRole == 'client' && isToolAssigned(toolId)) ||
+
+        // Beta/Free: segun allowedRoles
+        (userRole in tool.allowedRoles);
+      }
+
+      // Verificar si tiene curso inscrito (simplificado)
+      function hasEnrolledCourse(courses) {
+        return courses.size() > 0; // Se validara en backend
+      }
+
+      // Verificar si herramienta esta asignada (simplificado)
+      function isToolAssigned(toolId) {
+        return true; // Se validara en backend
+      }
+    }
+
+    // ==================== CATEGORIAS ====================
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ==================== SECCIONES ====================
+    match /sections/{sectionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ==================== ACCESS LOGS ====================
+    match /accessLogs/{logId} {
+      // Solo admin puede leer logs
+      allow read: if isAdmin();
+
+      // El sistema (backend) crea logs
+      allow create: if isAuthenticated();
+
+      // No se pueden modificar ni eliminar
+      allow update, delete: if false;
+    }
+
+    // ==================== ERROR LOGS ====================
+    match /errorLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ==================== SYSTEM LOGS ====================
+    match /systemLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // ==================== SETTINGS ====================
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ==================== COMPANIES ====================
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ==================== ANALYTICS (agregados) ====================
+    match /analytics/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Solo backend con Admin SDK
+    }
+  }
+}

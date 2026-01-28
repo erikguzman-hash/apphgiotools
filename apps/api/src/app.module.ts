@@ -7,7 +7,7 @@ import { ToolsModule } from './modules/tools/tools.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { LogsModule } from './modules/logs/logs.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
-import { PrismaModule } from './prisma/prisma.module';
+import { FirebaseModule } from './firebase/firebase.module';
 
 @Module({
   imports: [
@@ -25,8 +25,8 @@ import { PrismaModule } from './prisma/prisma.module';
       },
     ]),
 
-    // Base de datos
-    PrismaModule,
+    // Firebase (Firestore, Auth, Storage)
+    FirebaseModule,
 
     // Modulos de la aplicacion
     AuthModule,

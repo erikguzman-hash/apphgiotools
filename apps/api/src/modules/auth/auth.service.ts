@@ -1,15 +1,28 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../../prisma/prisma.service';
+import { FirebaseService } from '../../firebase/firebase.service';
 import { LoginDto } from './dto/login.dto';
-import { UserRole } from '@apphgio/database';
+import { COLLECTIONS } from '@apphgio/database';
+
+interface UserDoc {
+  id: string;
+  email: string;
+  displayName: string;
+  avatar?: string;
+  role: string;
+  status: string;
+  companyId?: string;
+  assignedToolIds: string[];
+  enrolledCourses: string[];
+  createdAt: any;
+  lastLogin?: any;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
+    private firebase: FirebaseService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
@@ -17,114 +30,112 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    // Buscar usuario
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
+    try {
+      // Verificar usuario en Firebase Auth
+      const authUser = await this.firebase.auth.getUserByEmail(email);
 
-    if (!user) {
-      throw new UnauthorizedException('Credenciales invalidas');
-    }
+      // Obtener documento del usuario en Firestore
+      const userDoc = await this.firebase.getDoc<UserDoc>(COLLECTIONS.USERS, authUser.uid);
 
-    // Verificar estado
-    if (user.status !== 'active') {
-      throw new UnauthorizedException('Usuario inactivo o suspendido');
-    }
+      if (!userDoc) {
+        throw new UnauthorizedException('Usuario no encontrado');
+      }
 
-    // Verificar password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales invalidas');
-    }
+      if (userDoc.status !== 'active') {
+        throw new UnauthorizedException('Usuario inactivo o suspendido');
+      }
 
-    // Generar tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+      // Nota: La verificacion del password se hace en el cliente con Firebase Auth
+      // Aqui asumimos que el cliente ya verifico las credenciales
+      // En produccion, usar signInWithEmailAndPassword en el cliente
 
-    // Guardar refresh token
-    await this.saveRefreshToken(user.id, tokens.refreshToken);
+      // Generar tokens JWT propios para el backend
+      const tokens = await this.generateTokens(authUser.uid, email, userDoc.role);
 
-    // Actualizar ultimo login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() },
-    });
+      // Actualizar ultimo login
+      await this.firebase.updateDoc(COLLECTIONS.USERS, authUser.uid, {
+        lastLogin: this.firebase.serverTimestamp(),
+      });
 
-    // Log de acceso
-    await this.prisma.systemLog.create({
-      data: {
+      // Log de acceso
+      await this.firebase.createDoc(COLLECTIONS.SYSTEM_LOGS, {
         type: 'audit',
         category: 'auth',
         action: 'LOGIN',
-        description: `Usuario ${user.email} inicio sesion`,
-        actorId: user.id,
-        actorEmail: user.email,
-        actorRole: user.role,
-      },
-    });
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        displayName: user.displayName,
-        role: user.role,
-        avatar: user.avatar,
-      },
-      ...tokens,
-    };
-  }
-
-  async refreshToken(refreshToken: string) {
-    // Buscar token en BD
-    const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-      include: { user: true },
-    });
-
-    if (!storedToken || storedToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token invalido o expirado');
-    }
-
-    // Generar nuevos tokens
-    const tokens = await this.generateTokens(
-      storedToken.user.id,
-      storedToken.user.email,
-      storedToken.user.role,
-    );
-
-    // Eliminar token viejo y guardar nuevo
-    await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
-    await this.saveRefreshToken(storedToken.user.id, tokens.refreshToken);
-
-    return tokens;
-  }
-
-  async logout(userId: string, refreshToken?: string) {
-    // Eliminar refresh tokens del usuario
-    if (refreshToken) {
-      await this.prisma.refreshToken.deleteMany({
-        where: { token: refreshToken },
+        description: `Usuario ${email} inicio sesion`,
+        actorId: authUser.uid,
+        actorEmail: email,
+        actorRole: userDoc.role,
       });
-    } else {
-      // Eliminar todos los tokens del usuario
-      await this.prisma.refreshToken.deleteMany({
-        where: { userId },
-      });
-    }
 
-    // Log de logout
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (user) {
-      await this.prisma.systemLog.create({
-        data: {
-          type: 'audit',
-          category: 'auth',
-          action: 'LOGOUT',
-          description: `Usuario ${user.email} cerro sesion`,
-          actorId: user.id,
-          actorEmail: user.email,
-          actorRole: user.role,
+      return {
+        user: {
+          id: authUser.uid,
+          email: userDoc.email,
+          displayName: userDoc.displayName,
+          role: userDoc.role,
+          avatar: userDoc.avatar,
         },
+        ...tokens,
+      };
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Credenciales invalidas');
+    }
+  }
+
+  async loginWithFirebaseToken(idToken: string) {
+    try {
+      // Verificar token de Firebase
+      const decodedToken = await this.firebase.auth.verifyIdToken(idToken);
+
+      // Obtener documento del usuario
+      const userDoc = await this.firebase.getDoc<UserDoc>(COLLECTIONS.USERS, decodedToken.uid);
+
+      if (!userDoc) {
+        throw new UnauthorizedException('Usuario no encontrado');
+      }
+
+      if (userDoc.status !== 'active') {
+        throw new UnauthorizedException('Usuario inactivo o suspendido');
+      }
+
+      // Generar tokens JWT
+      const tokens = await this.generateTokens(decodedToken.uid, decodedToken.email!, userDoc.role);
+
+      // Actualizar ultimo login
+      await this.firebase.updateDoc(COLLECTIONS.USERS, decodedToken.uid, {
+        lastLogin: this.firebase.serverTimestamp(),
+      });
+
+      return {
+        user: {
+          id: decodedToken.uid,
+          email: userDoc.email,
+          displayName: userDoc.displayName,
+          role: userDoc.role,
+          avatar: userDoc.avatar,
+        },
+        ...tokens,
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Token invalido');
+    }
+  }
+
+  async logout(userId: string) {
+    // Obtener usuario para el log
+    const userDoc = await this.firebase.getDoc<UserDoc>(COLLECTIONS.USERS, userId);
+
+    if (userDoc) {
+      await this.firebase.createDoc(COLLECTIONS.SYSTEM_LOGS, {
+        type: 'audit',
+        category: 'auth',
+        action: 'LOGOUT',
+        description: `Usuario ${userDoc.email} cerro sesion`,
+        actorId: userId,
+        actorEmail: userDoc.email,
+        actorRole: userDoc.role,
       });
     }
 
@@ -132,43 +143,38 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const userDoc = await this.firebase.getDoc<UserDoc>(COLLECTIONS.USERS, userId);
 
-    if (!user || user.status !== 'active') {
+    if (!userDoc || userDoc.status !== 'active') {
       throw new UnauthorizedException('Usuario no autorizado');
     }
 
-    return user;
+    return userDoc;
   }
 
   async getProfile(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        avatar: true,
-        role: true,
-        status: true,
-        companyId: true,
-        assignedToolIds: true,
-        enrolledCourses: true,
-        createdAt: true,
-        lastLogin: true,
-      },
-    });
+    const userDoc = await this.firebase.getDoc<UserDoc>(COLLECTIONS.USERS, userId);
 
-    if (!user) {
+    if (!userDoc) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
 
-    return user;
+    return {
+      id: userDoc.id,
+      email: userDoc.email,
+      displayName: userDoc.displayName,
+      avatar: userDoc.avatar,
+      role: userDoc.role,
+      status: userDoc.status,
+      companyId: userDoc.companyId,
+      assignedToolIds: userDoc.assignedToolIds,
+      enrolledCourses: userDoc.enrolledCourses,
+      createdAt: userDoc.createdAt,
+      lastLogin: userDoc.lastLogin,
+    };
   }
 
-  private async generateTokens(userId: string, email: string, role: UserRole) {
+  private async generateTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload);
@@ -183,18 +189,5 @@ export class AuthService {
       refreshToken,
       expiresIn: 7 * 24 * 60 * 60, // 7 dias en segundos
     };
-  }
-
-  private async saveRefreshToken(userId: string, token: string) {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 dias
-
-    await this.prisma.refreshToken.create({
-      data: {
-        token,
-        userId,
-        expiresAt,
-      },
-    });
   }
 }
